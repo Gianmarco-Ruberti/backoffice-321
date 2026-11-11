@@ -5,6 +5,6 @@ namespace backOffice_321
     public class TimeData
     {
         [JsonPropertyName("UnixTimeStamp")]
-        public int UnixTimeStamp { get; set; }
+        public long UnixTimeStamp { get; set; }
     }
 }
