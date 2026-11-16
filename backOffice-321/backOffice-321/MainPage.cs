@@ -1,4 +1,5 @@
-using backOffice_321.data;
+﻿using backOffice_321.data;
+using backOffice_321.ui;
 using SixLabors.ImageSharp;
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,7 @@ namespace backOffice_321
         private IMqttClient mqttClient;
 
         // ==========================================
-        // D�CLARATION DES CONTR�LES (CHAMPS DE LA CLASSE)
+        // DéCLARATION DES CONTRÔLES (CHAMPS DE LA CLASSE)
         // ==========================================
         private TextBox txtBpId;
         private TextBox txtBpName;
@@ -37,13 +38,34 @@ namespace backOffice_321
         private PictureBox picSpecialPicture;
         private Label lblDisplayTime;
 
+        private readonly WeeklySchedule weeklySchedule = WeeklySchedule.CreateDefault();
+        private readonly Dictionary<DayOfWeek, (CheckBox IsOpen, DateTimePicker Open, DateTimePicker Close)> scheduleRows
+            = new Dictionary<DayOfWeek, (CheckBox IsOpen, DateTimePicker Open, DateTimePicker Close)>();
+        private System.Windows.Forms.Timer scheduleRefreshTimer;
+
         public MainPage()
         {
             InitializeComponent();
             InitializeDefaultData();
-            UpdateUI();
+            InitializeScheduleRows();
 
-            // Initialisation et connexion au broker MQTT en arri�re-plan
+            // Thème sombre appliqué après la création de tous les contrôles (y compris les lignes d'horaires)
+            Theme.Apply(this);
+            lblOpenDetails.ForeColor = Theme.Muted;
+            lblDisplayTime.ForeColor = Theme.Accent;
+            btnImportJson.BackColor = Theme.Accent;
+            btnImportJson.ForeColor = Theme.Background;
+            btnImportJson.FlatAppearance.BorderColor = Theme.Accent;
+
+            UpdateUI();
+            RefreshOpenStatus();
+
+            // Le statut ouvert/fermé se met à jour tout seul quand l'heure change
+            scheduleRefreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            scheduleRefreshTimer.Tick += (_, _) => RefreshOpenStatus();
+            scheduleRefreshTimer.Start();
+
+            // Initialisation et connexion au broker MQTT en arrière-plan
             _ = InitializeMqttAsync();
         }
 
@@ -55,7 +77,7 @@ namespace backOffice_321
                 mqttClient = mqttFactory.CreateMqttClient();
 
                 var options = new MqttClientOptionsBuilder()
-                    .WithTcpServer("mqqt.blue.section-inf.ch", 1883)
+                    .WithTcpServer("mqtt.blue.section-inf.ch", 1883)
                     .WithCredentials("ict","321")
                     .Build();
 
@@ -67,29 +89,9 @@ namespace backOffice_321
                     {
                         string payload = e.ApplicationMessage.ConvertPayloadToString();
 
-                        try
+                        if (TryGetUnixTime(payload, out long unixTime))
                         {
-                            // Ajout d'options pour s�curiser la lecture JSON
-                            var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                            var timeData = JsonSerializer.Deserialize<TimeData>(payload, jsonOptions);
-
-                            if (timeData != null)
-                            {
-                                DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(timeData.UnixTimeStamp).LocalDateTime;
-
-                                if (this.IsHandleCreated)
-                                {
-                                    this.Invoke((MethodInvoker)delegate {
-                                        lblDisplayTime.Text = $"Heure : {dateTime:G}";
-                                        lblDisplayTime.Refresh();
-                                    });
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            // Si une erreur survient, elle s'affichera dans la console de debug de Visual Studio
-                            System.Diagnostics.Debug.WriteLine($"Erreur MQTT JSON : {ex.Message}");
+                            ShowTime(unixTime);
                         }
                     }
 
@@ -110,6 +112,99 @@ namespace backOffice_321
             }
         }
 
+        // Construit une ligne par jour de la semaine : jour ouvert + heure d'ouverture + heure de fermeture
+        private void InitializeScheduleRows()
+        {
+            DayOfWeek[] days =
+            {
+                DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+                DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+            };
+
+            int y = 95;
+
+            foreach (DayOfWeek day in days)
+            {
+                DaySchedule schedule = weeklySchedule.GetDay(day) ?? new DaySchedule { Day = day };
+
+                var lblDay = new Label
+                {
+                    Location = new System.Drawing.Point(15, y + 3),
+                    Size = new System.Drawing.Size(45, 20),
+                    Text = WeeklySchedule.GetShortDayName(day)
+                };
+
+                var chkIsOpen = new CheckBox
+                {
+                    Location = new System.Drawing.Point(62, y),
+                    Size = new System.Drawing.Size(56, 23),
+                    Text = "Ouvert",
+                    Checked = schedule.IsOpen
+                };
+
+                var dtOpen = new DateTimePicker
+                {
+                    Format = DateTimePickerFormat.Time,
+                    ShowUpDown = true,
+                    Location = new System.Drawing.Point(121, y),
+                    Size = new System.Drawing.Size(68, 23),
+                    Value = DateTime.Today.Add(schedule.OpenTime)
+                };
+
+                var dtClose = new DateTimePicker
+                {
+                    Format = DateTimePickerFormat.Time,
+                    ShowUpDown = true,
+                    Location = new System.Drawing.Point(192, y),
+                    Size = new System.Drawing.Size(68, 23),
+                    Value = DateTime.Today.Add(schedule.CloseTime)
+                };
+
+                chkIsOpen.CheckedChanged += (_, _) =>
+                {
+                    schedule.IsOpen = chkIsOpen.Checked;
+                    RefreshOpenStatus();
+                };
+
+                dtOpen.ValueChanged += (_, _) =>
+                {
+                    schedule.OpenTime = dtOpen.Value.TimeOfDay;
+                    RefreshOpenStatus();
+                };
+
+                dtClose.ValueChanged += (_, _) =>
+                {
+                    schedule.CloseTime = dtClose.Value.TimeOfDay;
+                    RefreshOpenStatus();
+                };
+
+                grpSchedule.Controls.Add(lblDay);
+                grpSchedule.Controls.Add(chkIsOpen);
+                grpSchedule.Controls.Add(dtOpen);
+                grpSchedule.Controls.Add(dtClose);
+
+                scheduleRows[day] = (chkIsOpen, dtOpen, dtClose);
+                y += 29;
+            }
+        }
+
+        private void RefreshOpenStatus()
+        {
+            bool isOpen = weeklySchedule.IsOpenAt(DateTime.Now, out string stateText, out string detailsText);
+
+            lblOpenStatus.Text = stateText;
+            lblOpenStatus.BackColor = Theme.Input;
+            lblOpenStatus.ForeColor = isOpen ? Theme.Open : Theme.Closed;
+            lblOpenDetails.Text = detailsText;
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            scheduleRefreshTimer?.Stop();
+            scheduleRefreshTimer?.Dispose();
+            base.OnFormClosed(e);
+        }
+
         private void InitializeDefaultData()
         {
             currentBusiness = new BusinessProfile
@@ -120,12 +215,20 @@ namespace backOffice_321
                 Special = new Product
                 {
                     Id = "PROD-3530",
-                    Name = "g�teau fondant au chocolat",
+                    Name = "gâteau fondant au chocolat",
                     Picture = "",
                     Price = 2.50m
                 },
                 Products = new List<Product>()
             };
+        }
+
+        private void EnsureSpecialInProducts()
+        {
+            if (currentBusiness.Special != null && !currentBusiness.Products.Contains(currentBusiness.Special))
+            {
+                currentBusiness.Products.Add(currentBusiness.Special);
+            }
         }
 
         private void UpdateUI()
@@ -162,6 +265,7 @@ namespace backOffice_321
                 }
             }
 
+            EnsureSpecialInProducts();
             lstProducts.Items.Clear();
             foreach (var prod in currentBusiness.Products)
             {
@@ -238,6 +342,155 @@ namespace backOffice_321
             };
         }
 
+        private void lstProducts_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstProducts.SelectedIndex < 0 || lstProducts.SelectedIndex >= currentBusiness.Products.Count)
+                return;
+
+            DisplayProduct(currentBusiness.Products[lstProducts.SelectedIndex]);
+        }
+
+        private void DisplayProduct(Product product)
+        {
+            if (product == null) return;
+
+            txtSpecialId.Text = product.Id;
+            txtSpecialName.Text = product.Name;
+            txtSpecialPicture.Text = product.Picture;
+
+            numSpecialPrice.Value = Math.Min(Math.Max(product.Price, numSpecialPrice.Minimum), numSpecialPrice.Maximum);
+
+            picSpecialPicture.Image = string.IsNullOrEmpty(product.Picture) ? null : Base64ToImage(product.Picture);
+        }
+
+        // Extrait l'heure Unix (en secondes) d'un message de temps.
+        // Seul le contrat doc/contracts est accepté : enveloppe { v, id, from, to, ts, type, payload }
+        // dont le payload time vaut { "timestamp": 1794218169 }.
+        // L'ancien modèle du README { "UnixTimeStamp": ... }, diffusé par d'autres nœuds sur le
+        // même topic, n'a pas d'enveloppe : il est ignoré.
+        private static bool TryGetUnixTime(string json, out long unixTime)
+        {
+            unixTime = 0;
+
+            try
+            {
+                using (JsonDocument document = JsonDocument.Parse(json))
+                {
+                    JsonElement root = document.RootElement;
+                    if (root.ValueKind != JsonValueKind.Object)
+                        return false;
+
+                    // Message sans enveloppe (ancien format) : on ne l'affiche pas
+                    if (!TryGetProperty(root, "payload", out JsonElement payloadElement) ||
+                        payloadElement.ValueKind != JsonValueKind.Object)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Message de temps ignoré (sans enveloppe) : {json}");
+                        return false;
+                    }
+
+                    return TryGetEnvelopeUnixTime(json, root, payloadElement, out unixTime);
+                }
+            }
+            catch (JsonException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Erreur MQTT JSON : {ex.Message}");
+                return false;
+            }
+        }
+
+        // Valide l'enveloppe et son payload contre les schémas de doc/contracts
+        // (envelope.schema.json et time.schema.json).
+        private static bool TryGetEnvelopeUnixTime(string json, JsonElement root, JsonElement payloadElement, out long unixTime)
+        {
+            unixTime = 0;
+
+            if (!EnvelopeValidator.ValidateEnvelope(json, out string envelopeError))
+            {
+                System.Diagnostics.Debug.WriteLine($"Enveloppe MQTT invalide : {envelopeError}");
+                return false;
+            }
+
+            string? type = TryGetProperty(root, "type", out JsonElement typeElement) ? typeElement.GetString() : null;
+            if (!string.Equals(type, "time", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!TimeEnvelopeValidator.ValidateTimeEnvelope(payloadElement.GetRawText(), out string payloadError))
+            {
+                System.Diagnostics.Debug.WriteLine($"Payload time invalide : {payloadError}");
+                return false;
+            }
+
+            return TryGetProperty(payloadElement, "timestamp", out JsonElement timestampElement) &&
+                   TryReadUnixSeconds(timestampElement, out unixTime);
+        }
+
+        private static bool TryReadUnixSeconds(JsonElement element, out long unixTime)
+        {
+            unixTime = 0;
+
+            if (element.ValueKind == JsonValueKind.Number)
+            {
+                if (!element.TryGetInt64(out unixTime))
+                    return false;
+            }
+            else if (element.ValueKind == JsonValueKind.String)
+            {
+                if (!long.TryParse(element.GetString(), out unixTime))
+                    return false;
+            }
+            else
+            {
+                return false;
+            }
+
+            // Bornes supportées par DateTimeOffset (jusqu'au 31.12.9999)
+            return unixTime >= 0 && unixTime <= 253402300799;
+        }
+
+        private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+        {
+            foreach (JsonProperty property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        private void ShowTime(long unixTime)
+        {
+            DateTime dateTime;
+            try
+            {
+                dateTime = DateTimeOffset.FromUnixTimeSeconds(unixTime).LocalDateTime;
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Heure Unix invalide ({unixTime}) : {ex.Message}");
+                return;
+            }
+
+            void UpdateLabel()
+            {
+                lblDisplayTime.Text = $"Heure : {dateTime:G}";
+                lblDisplayTime.Refresh();
+            }
+
+            if (IsDisposed)
+                return;
+
+            // Les messages MQTT arrivent sur un thread de fond : on repasse sur le thread de l'UI
+            if (InvokeRequired)
+                BeginInvoke((MethodInvoker)UpdateLabel);
+            else
+                UpdateLabel();
+        }
+
         private void btnExportJson_Click(object sender, EventArgs e)
         {
             // Logique d'export du commerce existante
@@ -263,7 +516,7 @@ namespace backOffice_321
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string jsonString = JsonSerializer.Serialize(exportData, options);
                 File.WriteAllText(sfd.FileName, jsonString);
-                MessageBox.Show("Business Profile export� avec succ�s !", "Succ�s", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Business Profile exporté avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -310,7 +563,7 @@ namespace backOffice_321
                         }
 
                         UpdateUI();
-                        MessageBox.Show("Business Profile charg� avec succ�s !", "Succ�s", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show("Business Profile chargé avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
                 catch (Exception ex)

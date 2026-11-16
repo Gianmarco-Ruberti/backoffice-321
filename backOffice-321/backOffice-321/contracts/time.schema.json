@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contrat/time",
+  "title": "Payload time (diffusé par le service de temps)",
+  "type": "object",
+  "required": [
+    "timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "timestamp": {
+      "type": "integer"
+    }
+  }
+}

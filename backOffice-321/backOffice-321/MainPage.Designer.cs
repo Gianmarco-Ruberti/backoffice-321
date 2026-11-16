@@ -52,6 +52,9 @@
             lblSpPrice = new Label();
             grpTime = new GroupBox();
             grpProducts = new GroupBox();
+            grpSchedule = new GroupBox();
+            lblOpenStatus = new Label();
+            lblOpenDetails = new Label();
             ((System.ComponentModel.ISupportInitialize)numSpecialPrice).BeginInit();
             ((System.ComponentModel.ISupportInitialize)picLogo).BeginInit();
             ((System.ComponentModel.ISupportInitialize)picSpecialPicture).BeginInit();
@@ -63,69 +66,71 @@
             // 
             // txtBpId
             // 
-            txtBpId.Location = new Point(120, 27);
+            txtBpId.            Location = new Point(150, 29);
             txtBpId.Name = "txtBpId";
-            txtBpId.Size = new Size(159, 23);
+            txtBpId.            Size = new Size(260, 23);
             txtBpId.TabIndex = 3;
             // 
             // txtBpName
             // 
-            txtBpName.Location = new Point(120, 62);
+            txtBpName.            Location = new Point(150, 64);
             txtBpName.Name = "txtBpName";
-            txtBpName.Size = new Size(159, 23);
+            txtBpName.            Size = new Size(260, 23);
             txtBpName.TabIndex = 4;
             // 
             // txtBpLogo
             // 
-            txtBpLogo.Location = new Point(120, 97);
+            txtBpLogo.            Location = new Point(150, 99);
             txtBpLogo.Name = "txtBpLogo";
-            txtBpLogo.Size = new Size(159, 23);
+            txtBpLogo.            Size = new Size(260, 23);
             txtBpLogo.TabIndex = 5;
             // 
             // txtSpecialId
             // 
-            txtSpecialId.Location = new Point(120, 27);
+            txtSpecialId.            Location = new Point(150, 29);
             txtSpecialId.Name = "txtSpecialId";
-            txtSpecialId.Size = new Size(159, 23);
+            txtSpecialId.            Size = new Size(260, 23);
             txtSpecialId.TabIndex = 4;
             // 
             // txtSpecialName
             // 
-            txtSpecialName.Location = new Point(120, 62);
+            txtSpecialName.            Location = new Point(150, 64);
             txtSpecialName.Name = "txtSpecialName";
-            txtSpecialName.Size = new Size(159, 23);
+            txtSpecialName.            Size = new Size(260, 23);
             txtSpecialName.TabIndex = 5;
             // 
             // txtSpecialPicture
             // 
-            txtSpecialPicture.Location = new Point(120, 97);
+            txtSpecialPicture.            Location = new Point(150, 99);
             txtSpecialPicture.Name = "txtSpecialPicture";
-            txtSpecialPicture.Size = new Size(159, 23);
+            txtSpecialPicture.            Size = new Size(260, 23);
             txtSpecialPicture.TabIndex = 6;
             // 
             // numSpecialPrice
             // 
             numSpecialPrice.DecimalPlaces = 2;
-            numSpecialPrice.Location = new Point(120, 132);
+            numSpecialPrice.Location = new Point(150, 134);
             numSpecialPrice.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
             numSpecialPrice.Name = "numSpecialPrice";
-            numSpecialPrice.Size = new Size(150, 23);
+            numSpecialPrice.Size = new Size(260, 23);
             numSpecialPrice.TabIndex = 7;
             // 
             // lstProducts
             // 
             lstProducts.FormattingEnabled = true;
-            lstProducts.ItemHeight = 15;
-            lstProducts.Location = new Point(15, 25);
+            lstProducts.IntegralHeight = false;
+            lstProducts.ItemHeight = 17;
+            lstProducts.Location = new Point(16, 30);
             lstProducts.Name = "lstProducts";
-            lstProducts.Size = new Size(290, 364);
+            lstProducts.Size = new Size(268, 380);
             lstProducts.TabIndex = 0;
+            lstProducts.SelectedIndexChanged += lstProducts_SelectedIndexChanged;
             // 
             // btnExportJson
             // 
-            btnExportJson.Location = new Point(580, 455);
+            btnExportJson.Location = new Point(660, 462);
             btnExportJson.Name = "btnExportJson";
-            btnExportJson.Size = new Size(150, 35);
+            btnExportJson.Size = new Size(145, 38);
             btnExportJson.TabIndex = 4;
             btnExportJson.Text = "Exporter Profil JSON";
             btnExportJson.UseVisualStyleBackColor = true;
@@ -133,9 +138,9 @@
             // 
             // btnImportJson
             // 
-            btnImportJson.Location = new Point(745, 455);
+            btnImportJson.Location = new Point(815, 462);
             btnImportJson.Name = "btnImportJson";
-            btnImportJson.Size = new Size(150, 35);
+            btnImportJson.Size = new Size(145, 38);
             btnImportJson.TabIndex = 5;
             btnImportJson.Text = "Importer Profil JSON";
             btnImportJson.UseVisualStyleBackColor = true;
@@ -143,9 +148,10 @@
             // 
             // picLogo
             // 
-            picLogo.Location = new Point(285, 27);
+            picLogo.BorderStyle = BorderStyle.FixedSingle;
+            picLogo.Location = new Point(450, 25);
             picLogo.Name = "picLogo";
-            picLogo.Size = new Size(100, 100);
+            picLogo.Size = new Size(150, 125);
             picLogo.SizeMode = PictureBoxSizeMode.Zoom;
             picLogo.TabIndex = 6;
             picLogo.TabStop = false;
@@ -153,9 +159,9 @@
             // picSpecialPicture
             // 
             picSpecialPicture.BorderStyle = BorderStyle.FixedSingle;
-            picSpecialPicture.Location = new Point(360, 27);
+            picSpecialPicture.Location = new Point(450, 25);
             picSpecialPicture.Name = "picSpecialPicture";
-            picSpecialPicture.Size = new Size(165, 165);
+            picSpecialPicture.Size = new Size(150, 165);
             picSpecialPicture.SizeMode = PictureBoxSizeMode.Zoom;
             picSpecialPicture.TabIndex = 8;
             picSpecialPicture.TabStop = false;
@@ -163,7 +169,7 @@
             // lblDisplayTime
             // 
             lblDisplayTime.AutoSize = true;
-            lblDisplayTime.Location = new Point(15, 40);
+            lblDisplayTime.Location = new Point(20, 40);
             lblDisplayTime.Name = "lblDisplayTime";
             lblDisplayTime.Size = new Size(97, 15);
             lblDisplayTime.TabIndex = 2;
@@ -177,9 +183,10 @@
             grpBusiness.Controls.Add(txtBpId);
             grpBusiness.Controls.Add(txtBpName);
             grpBusiness.Controls.Add(txtBpLogo);
+            grpBusiness.Controls.Add(picLogo);
             grpBusiness.Location = new Point(20, 20);
             grpBusiness.Name = "grpBusiness";
-            grpBusiness.Size = new Size(540, 180);
+            grpBusiness.Size = new Size(620, 175);
             grpBusiness.TabIndex = 0;
             grpBusiness.TabStop = false;
             grpBusiness.Text = "Informations du Commerce";
@@ -187,7 +194,7 @@
             // lblId
             // 
             lblId.AutoSize = true;
-            lblId.Location = new Point(15, 30);
+            lblId.Location = new Point(20, 32);
             lblId.Name = "lblId";
             lblId.Size = new Size(86, 15);
             lblId.TabIndex = 0;
@@ -196,7 +203,7 @@
             // lblName
             // 
             lblName.AutoSize = true;
-            lblName.Location = new Point(15, 65);
+            lblName.Location = new Point(20, 67);
             lblName.Name = "lblName";
             lblName.Size = new Size(40, 15);
             lblName.TabIndex = 1;
@@ -205,7 +212,7 @@
             // lblLogo
             // 
             lblLogo.AutoSize = true;
-            lblLogo.Location = new Point(15, 100);
+            lblLogo.Location = new Point(20, 102);
             lblLogo.Name = "lblLogo";
             lblLogo.Size = new Size(87, 15);
             lblLogo.TabIndex = 2;
@@ -222,9 +229,9 @@
             grpSpecial.Controls.Add(txtSpecialPicture);
             grpSpecial.Controls.Add(numSpecialPrice);
             grpSpecial.Controls.Add(picSpecialPicture);
-            grpSpecial.Location = new Point(20, 215);
+            grpSpecial.Location = new Point(20, 210);
             grpSpecial.Name = "grpSpecial";
-            grpSpecial.Size = new Size(540, 210);
+            grpSpecial.Size = new Size(620, 205);
             grpSpecial.TabIndex = 1;
             grpSpecial.TabStop = false;
             grpSpecial.Text = "Produit Spécial / Vedette";
@@ -232,7 +239,7 @@
             // lblSpId
             // 
             lblSpId.AutoSize = true;
-            lblSpId.Location = new Point(15, 30);
+            lblSpId.Location = new Point(20, 32);
             lblSpId.Name = "lblSpId";
             lblSpId.Size = new Size(66, 15);
             lblSpId.TabIndex = 0;
@@ -241,7 +248,7 @@
             // lblSpName
             // 
             lblSpName.AutoSize = true;
-            lblSpName.Location = new Point(15, 65);
+            lblSpName.Location = new Point(20, 67);
             lblSpName.Name = "lblSpName";
             lblSpName.Size = new Size(40, 15);
             lblSpName.TabIndex = 1;
@@ -250,7 +257,7 @@
             // lblSpPic
             // 
             lblSpPic.AutoSize = true;
-            lblSpPic.Location = new Point(15, 100);
+            lblSpPic.Location = new Point(20, 102);
             lblSpPic.Name = "lblSpPic";
             lblSpPic.Size = new Size(93, 15);
             lblSpPic.TabIndex = 2;
@@ -259,7 +266,7 @@
             // lblSpPrice
             // 
             lblSpPrice.AutoSize = true;
-            lblSpPrice.Location = new Point(15, 135);
+            lblSpPrice.Location = new Point(20, 137);
             lblSpPrice.Name = "lblSpPrice";
             lblSpPrice.Size = new Size(49, 15);
             lblSpPrice.TabIndex = 3;
@@ -268,9 +275,9 @@
             // grpTime
             // 
             grpTime.Controls.Add(lblDisplayTime);
-            grpTime.Location = new Point(20, 435);
+            grpTime.Location = new Point(20, 430);
             grpTime.Name = "grpTime";
-            grpTime.Size = new Size(540, 80);
+            grpTime.Size = new Size(620, 95);
             grpTime.TabIndex = 2;
             grpTime.TabStop = false;
             grpTime.Text = "Synchronisation de l'Heure Unix";
@@ -278,23 +285,55 @@
             // grpProducts
             // 
             grpProducts.Controls.Add(lstProducts);
-            grpProducts.Location = new Point(580, 20);
+            grpProducts.Location = new Point(660, 20);
             grpProducts.Name = "grpProducts";
-            grpProducts.Size = new Size(320, 415);
+            grpProducts.Size = new Size(300, 425);
             grpProducts.TabIndex = 3;
             grpProducts.TabStop = false;
             grpProducts.Text = "Liste des Produits";
+            // 
+            // grpSchedule
+            // 
+            grpSchedule.Controls.Add(lblOpenStatus);
+            grpSchedule.Controls.Add(lblOpenDetails);
+            grpSchedule.Location = new Point(980, 20);
+            grpSchedule.Name = "grpSchedule";
+            grpSchedule.Size = new Size(300, 330);
+            grpSchedule.TabIndex = 6;
+            grpSchedule.TabStop = false;
+            grpSchedule.Text = "Horaires d'ouverture";
+            // 
+            // lblOpenStatus
+            // 
+            lblOpenStatus.BorderStyle = BorderStyle.FixedSingle;
+            lblOpenStatus.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+            lblOpenStatus.Location = new Point(15, 22);
+            lblOpenStatus.Name = "lblOpenStatus";
+            lblOpenStatus.Size = new Size(270, 40);
+            lblOpenStatus.TabIndex = 0;
+            lblOpenStatus.Text = "—";
+            lblOpenStatus.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // lblOpenDetails
+            // 
+            lblOpenDetails.ForeColor = SystemColors.GrayText;
+            lblOpenDetails.Location = new Point(15, 66);
+            lblOpenDetails.Name = "lblOpenDetails";
+            lblOpenDetails.Size = new Size(270, 20);
+            lblOpenDetails.TabIndex = 1;
+            lblOpenDetails.Text = "";
+            lblOpenDetails.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // MainPage
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(920, 530);
-            Controls.Add(picLogo);
+            ClientSize = new Size(1300, 560);
             Controls.Add(grpBusiness);
             Controls.Add(grpSpecial);
             Controls.Add(grpTime);
             Controls.Add(grpProducts);
+            Controls.Add(grpSchedule);
             Controls.Add(btnExportJson);
             Controls.Add(btnImportJson);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -324,6 +363,9 @@
         private Label lblSpPrice;
         private GroupBox grpTime;
         private GroupBox grpProducts;
+        private GroupBox grpSchedule;
+        private Label lblOpenStatus;
+        private Label lblOpenDetails;
     }
 }
 
