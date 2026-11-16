@@ -1,0 +1,12 @@
+{
+  "id": "COM-0277",
+  "name": "L\u0027Antre du Chocomancien",
+  "logo": "Logo_Base_64_16:9",
+  "special": {
+    "id": "PROD-3530",
+    "name": "g\u00E2teau fondant au chocolat",
+    "picture": "Produit_Base_64_Carr\u00E9",
+    "price": 2.50
+  },
+  "products": []
+}
