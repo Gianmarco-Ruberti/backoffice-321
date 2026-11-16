@@ -240,6 +240,7 @@ namespace backOffice_321
 
         private void btnExportJson_Click(object sender, EventArgs e)
         {
+            // Logique d'export du commerce existante
             if (!ValidateInputs()) return;
             SaveFromUI();
 
@@ -278,6 +279,7 @@ namespace backOffice_321
                 try
                 {
                     string jsonString = File.ReadAllText(ofd.FileName);
+                    // --- IMPORTATION DU COMMERCE ---
                     var loadedBusiness = JsonSerializer.Deserialize<BusinessProfile>(jsonString);
 
                     if (loadedBusiness != null)
@@ -314,66 +316,6 @@ namespace backOffice_321
                 catch (Exception ex)
                 {
                     MessageBox.Show($"Erreur lors de la lecture du fichier : {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void btnExportTime_Click(object sender, EventArgs e)
-        {
-            SaveFileDialog sfd = new SaveFileDialog
-            {
-                Filter = "Fichiers JSON (*.json)|*.json",
-                FileName = "timedata.json"
-            };
-
-            if (sfd.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    long currentUnixTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-                    var timeData = new TimeData
-                    {
-                        UnixTimeStamp = (int)currentUnixTimestamp
-                    };
-
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    string jsonString = JsonSerializer.Serialize(timeData, options);
-
-                    File.WriteAllText(sfd.FileName, jsonString);
-                    MessageBox.Show("Timestamp Unix exporté avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Erreur lors de l'export : {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void btnImportTime_Click(object sender, EventArgs e)
-        {
-            OpenFileDialog ofd = new OpenFileDialog
-            {
-                Filter = "Fichiers JSON (*.json)|*.json"
-            };
-
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    string jsonString = File.ReadAllText(ofd.FileName);
-                    var timeData = JsonSerializer.Deserialize<TimeData>(jsonString);
-
-                    if (timeData != null)
-                    {
-                        DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(timeData.UnixTimeStamp).LocalDateTime;
-                        lblDisplayTime.Text = $"Heure : {dateTime:G}";
-                        MessageBox.Show($"Heure convertie : {dateTime}", "Lecture Unix Time", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Erreur lors de la lecture : {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
