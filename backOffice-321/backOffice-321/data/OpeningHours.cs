@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace backOffice_321.data
 {
@@ -15,6 +16,7 @@ namespace backOffice_321.data
         public TimeSpan CloseTime { get; set; }
 
         // Une plage horaire n'est valable que si la fermeture suit l'ouverture dans la même journée
+        [JsonIgnore]
         public bool HasValidRange => IsOpen && CloseTime > OpenTime;
     }
 
@@ -33,7 +35,8 @@ namespace backOffice_321.data
                 schedule.Days.Add(new DaySchedule
                 {
                     Day = day,
-                    IsOpen = day != DayOfWeek.Sunday,
+                    // Le commerce est ouvert tous les jours
+                    IsOpen = true,
                     OpenTime = new TimeSpan(8, 0, 0),
                     CloseTime = isSaturday ? new TimeSpan(12, 0, 0) : new TimeSpan(18, 0, 0)
                 });

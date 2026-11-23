@@ -21,6 +21,26 @@ namespace backOffice_321
         private BusinessProfile currentBusiness = new BusinessProfile();
         private IMqttClient mqttClient;
 
+        // Heure reçue par MQTT : sert de référence pour le statut d'ouverture, comme pour l'affichage
+        private DateTime? mqttTime;
+
+        // Dossier des profils JSON : à côté du dossier du projet (C:\...\GitHub\backoffice-321\Json)
+        private const string JsonFolderPath = @"C:\Users\py13koy\Documents\GitHub\backoffice-321\Json";
+
+        // Les fichiers JSON utilisent des noms en camelCase : la lecture doit ignorer la casse
+        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        };
+
+        // Les heures réglées dans l'application sont enregistrées dans le profil utilisateur
+        // et rechargées au démarrage suivant.
+        private static readonly string ScheduleFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "backOffice-321",
+            "opening-hours.json");
+
         // ==========================================
         // DéCLARATION DES CONTRÔLES (CHAMPS DE LA CLASSE)
         // ==========================================
@@ -39,14 +59,13 @@ namespace backOffice_321
         private Label lblDisplayTime;
 
         private readonly WeeklySchedule weeklySchedule = WeeklySchedule.CreateDefault();
-        private readonly Dictionary<DayOfWeek, (CheckBox IsOpen, DateTimePicker Open, DateTimePicker Close)> scheduleRows
-            = new Dictionary<DayOfWeek, (CheckBox IsOpen, DateTimePicker Open, DateTimePicker Close)>();
         private System.Windows.Forms.Timer scheduleRefreshTimer;
-
+       
         public MainPage()
         {
             InitializeComponent();
-            InitializeDefaultData();
+            LoadBusinessProfilesFromFolder();
+            LoadSchedule();
             InitializeScheduleRows();
 
             // Thème sombre appliqué après la création de tous les contrôles (y compris les lignes d'horaires)
@@ -134,20 +153,12 @@ namespace backOffice_321
                     Text = WeeklySchedule.GetShortDayName(day)
                 };
 
-                var chkIsOpen = new CheckBox
-                {
-                    Location = new System.Drawing.Point(62, y),
-                    Size = new System.Drawing.Size(56, 23),
-                    Text = "Ouvert",
-                    Checked = schedule.IsOpen
-                };
-
                 var dtOpen = new DateTimePicker
                 {
                     Format = DateTimePickerFormat.Time,
                     ShowUpDown = true,
-                    Location = new System.Drawing.Point(121, y),
-                    Size = new System.Drawing.Size(68, 23),
+                    Location = new System.Drawing.Point(64, y),
+                    Size = new System.Drawing.Size(80, 23),
                     Value = DateTime.Today.Add(schedule.OpenTime)
                 };
 
@@ -155,42 +166,88 @@ namespace backOffice_321
                 {
                     Format = DateTimePickerFormat.Time,
                     ShowUpDown = true,
-                    Location = new System.Drawing.Point(192, y),
-                    Size = new System.Drawing.Size(68, 23),
+                    Location = new System.Drawing.Point(152, y),
+                    Size = new System.Drawing.Size(80, 23),
                     Value = DateTime.Today.Add(schedule.CloseTime)
-                };
-
-                chkIsOpen.CheckedChanged += (_, _) =>
-                {
-                    schedule.IsOpen = chkIsOpen.Checked;
-                    RefreshOpenStatus();
                 };
 
                 dtOpen.ValueChanged += (_, _) =>
                 {
                     schedule.OpenTime = dtOpen.Value.TimeOfDay;
+                    SaveSchedule();
                     RefreshOpenStatus();
                 };
 
                 dtClose.ValueChanged += (_, _) =>
                 {
                     schedule.CloseTime = dtClose.Value.TimeOfDay;
+                    SaveSchedule();
                     RefreshOpenStatus();
                 };
 
                 grpSchedule.Controls.Add(lblDay);
-                grpSchedule.Controls.Add(chkIsOpen);
                 grpSchedule.Controls.Add(dtOpen);
                 grpSchedule.Controls.Add(dtClose);
-
-                scheduleRows[day] = (chkIsOpen, dtOpen, dtClose);
                 y += 29;
+            }
+        }
+
+        // Relit les horaires enregistrés lors d'une session précédente
+        private void LoadSchedule()
+        {
+            if (!File.Exists(ScheduleFilePath))
+                return;
+
+            try
+            {
+                WeeklySchedule? saved = JsonSerializer.Deserialize<WeeklySchedule>(File.ReadAllText(ScheduleFilePath), JsonOptions);
+
+                if (saved?.Days == null)
+                    return;
+
+                foreach (DaySchedule savedDay in saved.Days)
+                {
+                    DaySchedule? target = weeklySchedule.GetDay(savedDay.Day);
+
+                    if (target == null)
+                        continue;
+
+                    target.IsOpen = true;
+                    target.OpenTime = savedDay.OpenTime;
+                    target.CloseTime = savedDay.CloseTime;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Horaires enregistrés ignorés : {ex.Message}");
+            }
+        }
+
+        // Enregistre les horaires dès qu'une heure est modifiée
+        private void SaveSchedule()
+        {
+            try
+            {
+                string? folder = Path.GetDirectoryName(ScheduleFilePath);
+
+                if (!string.IsNullOrEmpty(folder))
+                    Directory.CreateDirectory(folder);
+
+                File.WriteAllText(ScheduleFilePath, JsonSerializer.Serialize(weeklySchedule, JsonOptions));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Horaires non enregistrés : {ex.Message}");
             }
         }
 
         private void RefreshOpenStatus()
         {
-            bool isOpen = weeklySchedule.IsOpenAt(DateTime.Now, out string stateText, out string detailsText);
+            // On se cale sur l'heure reçue par MQTT ; tant qu'aucune heure n'est arrivée,
+            // on utilise l'heure locale de la machine.
+            DateTime moment = mqttTime ?? DateTime.Now;
+
+            bool isOpen = weeklySchedule.IsOpenAt(moment, out string stateText, out string detailsText);
 
             lblOpenStatus.Text = stateText;
             lblOpenStatus.BackColor = Theme.Input;
@@ -205,27 +262,113 @@ namespace backOffice_321
             base.OnFormClosed(e);
         }
 
-        private void InitializeDefaultData()
+        // Au démarrage, le commerce et ses produits viennent des fichiers JSON du dossier Json
+        private void LoadBusinessProfilesFromFolder()
         {
-            currentBusiness = new BusinessProfile
+            currentBusiness = new BusinessProfile();
+
+            string folder = FindJsonFolder();
+
+            if (!Directory.Exists(folder))
             {
-                ID = "COM-0277",
-                Name = "L'Antre du Chocomancien",
-                Logo = "",
-                Special = new Product
+                System.Diagnostics.Debug.WriteLine($"Dossier JSON introuvable : {folder}");
+                return;
+            }
+
+            string[] files = Directory.GetFiles(folder, "*.json");
+            Array.Sort(files);
+
+            // Commerce affiché par défaut à l'ouverture, quel que soit l'ordre alphabétique
+            const string defaultProfileId = "COM-0277";
+            files = files
+                .OrderByDescending(file => string.Equals(Path.GetFileNameWithoutExtension(file), defaultProfileId, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(file => file, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (string file in files)
+            {
+                try
                 {
-                    Id = "PROD-3530",
-                    Name = "gâteau fondant au chocolat",
-                    Picture = "",
-                    Price = 2.50m
-                },
-                Products = new List<Product>()
-            };
+                    BusinessProfile? profile = JsonSerializer.Deserialize<BusinessProfile>(File.ReadAllText(file), JsonOptions);
+
+                    if (profile != null)
+                        MergeBusinessProfile(profile);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Profil JSON ignoré ({Path.GetFileName(file)}) : {ex.Message}");
+                }
+            }
+        }
+
+        // Cherche le dossier Json en remontant depuis le dossier de l'exécutable (bin\Debug\net8.0-windows\...)
+        private static string FindJsonFolder()
+        {
+            DirectoryInfo? directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+            for (int i = 0; i < 6 && directory != null; i++, directory = directory.Parent)
+            {
+                string candidate = Path.Combine(directory.FullName, "Json");
+
+                if (Directory.Exists(candidate))
+                    return candidate;
+            }
+
+            return JsonFolderPath;
+        }
+
+        // Le premier profil rencontré fournit l'identité du commerce ; les produits de tous les fichiers sont fusionnés
+        private void MergeBusinessProfile(BusinessProfile profile)
+        {
+            if (string.IsNullOrWhiteSpace(currentBusiness.ID))
+            {
+                currentBusiness.ID = profile.ID ?? string.Empty;
+                currentBusiness.Name = profile.Name ?? string.Empty;
+                currentBusiness.Logo = profile.Logo ?? string.Empty;
+            }
+
+            if (profile.Special != null && !string.IsNullOrWhiteSpace(profile.Special.Id))
+            {
+                if (string.IsNullOrWhiteSpace(currentBusiness.Special?.Id))
+                    currentBusiness.Special = profile.Special;
+
+                AddProductIfMissing(profile.Special);
+            }
+
+            if (profile.Products != null)
+            {
+                foreach (Product product in profile.Products)
+                {
+                    if (product != null)
+                        AddProductIfMissing(product);
+                }
+            }
+        }
+
+        // Indique si un produit ayant cet ID figure déjà dans la liste (sans tenir compte de la casse)
+        private bool ProductExists(string id)
+        {
+            if (currentBusiness.Products == null || string.IsNullOrWhiteSpace(id))
+                return false;
+
+            string wanted = id.Trim();
+
+            return currentBusiness.Products.Exists(existing =>
+                string.Equals((existing?.Id ?? string.Empty).Trim(), wanted, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void AddProductIfMissing(Product product)
+        {
+            if (currentBusiness.Products == null)
+                currentBusiness.Products = new List<Product>();
+
+            if (product != null && !ProductExists(product.Id))
+                currentBusiness.Products.Add(product);
         }
 
         private void EnsureSpecialInProducts()
         {
-            if (currentBusiness.Special != null && !currentBusiness.Products.Contains(currentBusiness.Special))
+            if (currentBusiness.Special != null && !ProductExists(currentBusiness.Special.Id))
             {
                 currentBusiness.Products.Add(currentBusiness.Special);
             }
@@ -304,8 +447,8 @@ namespace backOffice_321
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur d'affichage de l'image : {ex.Message}",
-                        "Erreur Image", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // Les JSON peuvent contenir des placeholders non base64 : on n'affiche pas d'image
+                System.Diagnostics.Debug.WriteLine($"Image ignorée : {ex.Message}");
                 return null;
             }
         }
@@ -477,8 +620,10 @@ namespace backOffice_321
 
             void UpdateLabel()
             {
+                mqttTime = dateTime;
                 lblDisplayTime.Text = $"Heure : {dateTime:G}";
                 lblDisplayTime.Refresh();
+                RefreshOpenStatus();
             }
 
             if (IsDisposed)
@@ -533,7 +678,7 @@ namespace backOffice_321
                 {
                     string jsonString = File.ReadAllText(ofd.FileName);
                     // --- IMPORTATION DU COMMERCE ---
-                    var loadedBusiness = JsonSerializer.Deserialize<BusinessProfile>(jsonString);
+                    var loadedBusiness = JsonSerializer.Deserialize<BusinessProfile>(jsonString, JsonOptions);
 
                     if (loadedBusiness != null)
                     {
@@ -545,7 +690,8 @@ namespace backOffice_321
                         {
                             currentBusiness.Special = loadedBusiness.Special;
 
-                            if (!currentBusiness.Products.Exists(existing => existing.Id == loadedBusiness.Special.Id))
+                            // Si l'ID est déjà dans la liste, le produit importé est ignoré
+                            if (!ProductExists(loadedBusiness.Special.Id))
                             {
                                 currentBusiness.Products.Add(loadedBusiness.Special);
                             }
@@ -555,10 +701,10 @@ namespace backOffice_321
                         {
                             foreach (var p in loadedBusiness.Products)
                             {
-                                if (!currentBusiness.Products.Exists(existing => existing.Id == p.Id))
-                                {
-                                    currentBusiness.Products.Add(p);
-                                }
+                                if (p == null || ProductExists(p.Id))
+                                    continue;
+
+                                currentBusiness.Products.Add(p);
                             }
                         }
 
