@@ -60,6 +60,15 @@ namespace backOffice_321
 
         private readonly WeeklySchedule weeklySchedule = WeeklySchedule.CreateDefault();
         private System.Windows.Forms.Timer scheduleRefreshTimer;
+
+        // Nœud auquel cette application s'identifie (topics umddcmid3b/...)
+        private const string NodeName = "umddcmid3b";
+        private const string TimeTopic = NodeName + "/time";
+        //private const string TimeTopic = NodeName + "/timebackup";
+        private const string LogTopic = NodeName + "/log";
+
+        // Dernier état connu : sert à ne publier un log que lorsque l'état change
+        private bool? lastOpenState;
        
         public MainPage()
         {
@@ -104,7 +113,7 @@ namespace backOffice_321
                 {
                     string topic = e.ApplicationMessage.Topic;
 
-                    if (topic == "umddcmid3b/time")
+                    if (topic == TimeTopic)
                     {
                         string payload = e.ApplicationMessage.ConvertPayloadToString();
 
@@ -120,7 +129,7 @@ namespace backOffice_321
                 await mqttClient.ConnectAsync(options, CancellationToken.None);
 
                 var subscribeOptions = mqttFactory.CreateSubscribeOptionsBuilder()
-                    .WithTopicFilter("umddcmid3b/time")
+                    .WithTopicFilter(TimeTopic)
                     .Build();
 
                 await mqttClient.SubscribeAsync(subscribeOptions, CancellationToken.None);
@@ -253,6 +262,40 @@ namespace backOffice_321
             lblOpenStatus.BackColor = Theme.Input;
             lblOpenStatus.ForeColor = isOpen ? Theme.Open : Theme.Closed;
             lblOpenDetails.Text = detailsText;
+
+            // Un log n'est envoyé que si l'état était déjà connu et qu'il vient de changer
+            bool stateChanged = lastOpenState.HasValue && lastOpenState.Value != isOpen;
+            lastOpenState = isOpen;
+
+            if (stateChanged)
+                _ = PublishOpenStateLogAsync(isOpen, moment);
+        }
+
+        // Publie le changement d'état ouvert/fermé sur umddcmid3b/log, au nom du commerce
+        private async Task PublishOpenStateLogAsync(bool isOpen, DateTime moment)
+        {
+            if (mqttClient == null || !mqttClient.IsConnected)
+                return;
+
+            try
+            {
+                // Émetteur = ID du commerce (COM-XXXX), comme les autres nœuds du réseau
+                string from = string.IsNullOrWhiteSpace(currentBusiness.ID) ? NodeName : currentBusiness.ID.Trim();
+                string shopName = string.IsNullOrWhiteSpace(currentBusiness.Name) ? from : currentBusiness.Name.Trim();
+                string text = $"{shopName} est maintenant {(isOpen ? "ouvert" : "fermer")} ({moment:dd.MM.yyyy HH:mm})";
+                string payload = LogEnvelope.Create(from, "*", "info", text);
+
+                var message = new MqttApplicationMessageBuilder()
+                    .WithTopic(LogTopic)
+                    .WithPayload(payload)
+                    .Build();
+
+                await mqttClient.PublishAsync(message, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Log d'état non publié : {ex.Message}");
+            }
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
